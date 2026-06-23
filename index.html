@@ -8,6 +8,8 @@
 <title>열람 전용 자료</title>
 <link rel="stylesheet" as="style" crossorigin
       href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.min.css" />
+<!-- PDF 표시 엔진: 호환성이 가장 좋은 안정 버전(구형 아이패드 포함) -->
+<script src="https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.min.js"></script>
 <style>
   /* ============================================================
      설정값을 바꾸려면 아래 <script>의 CONFIG 부분을 수정하세요.
@@ -231,10 +233,9 @@
   <!-- 앱 전환 가림막 -->
   <div id="blurShield">화면이 잠시 가려졌습니다</div>
 
-<script type="module">
-import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.min.mjs';
+<script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.worker.min.mjs';
+  'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.worker.min.js';
 
 /* ============================================================
    ▼▼▼  여기만 바꾸면 됩니다  ▼▼▼
@@ -346,7 +347,14 @@ async function unlock(){
     topbar.style.display = 'flex';
     document.getElementById('toolbar').style.display = 'flex';
   }catch(err){
-    gateMsg.textContent = err.message || '열기에 실패했습니다.';
+    console.error('[viewer] 열기 실패:', err);
+    let msg = err && err.message ? err.message : '열기에 실패했습니다.';
+    if(typeof pdfjsLib === 'undefined'){
+      msg = 'PDF 표시 엔진을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.';
+    } else if(/worker|fetch|script|network|load/i.test(msg)){
+      msg = 'PDF를 표시하지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.';
+    }
+    gateMsg.textContent = msg;
   }finally{
     enterBtn.disabled = false; enterBtn.textContent = '열기';
   }
