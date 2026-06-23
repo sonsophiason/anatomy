@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PDF 암호화 도구 (오프라인)</title>
+<style>
+  :root{ --bg:#f4f5f7; --ink:#1d2125; --muted:#8a9099; --line:#e3e6ea; --accent:#2c8a86; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,system-ui,"Segoe UI",sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card{
+    width:100%; max-width:440px; background:#fff; border:1px solid var(--line);
+    border-radius:14px; padding:28px; box-shadow:0 2px 10px rgba(20,24,28,.05);
+  }
+  h1{ font-size:18px; margin:0 0 4px; }
+  .sub{ font-size:13px; color:var(--muted); margin:0 0 22px; line-height:1.55; }
+  label{ display:block; font-size:13px; font-weight:600; margin:16px 0 7px; }
+  input[type=file], input[type=text]{
+    width:100%; height:44px; padding:0 12px; font-size:15px;
+    border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); outline:none;
+  }
+  input[type=file]{ padding:9px 12px; height:auto; }
+  input:focus{ border-color:var(--accent); }
+  button{
+    width:100%; height:46px; margin-top:22px; font-size:15px; font-weight:600;
+    border:none; border-radius:9px; background:var(--accent); color:#fff; cursor:pointer;
+  }
+  button:disabled{ opacity:.5; cursor:default; }
+  .msg{ font-size:13px; margin-top:14px; min-height:18px; line-height:1.5; }
+  .ok{ color:var(--accent); } .err{ color:#c0392b; }
+  .note{ font-size:12px; color:var(--muted); margin-top:18px; line-height:1.55;
+         border-top:1px solid var(--line); padding-top:14px; }
+  code{ background:#eef0f2; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>PDF 암호화 도구</h1>
+    <p class="sub">이 페이지는 <b>인터넷에 연결하지 않아도</b> 동작합니다(브라우저 안에서만 처리). 원본 PDF는 어디로도 전송되지 않습니다.</p>
+
+    <label>1. 암호화할 PDF 선택</label>
+    <input id="file" type="file" accept="application/pdf" />
+
+    <label>2. 비밀번호 설정 (열람자에게 알려줄 암호)</label>
+    <input id="pw" type="text" placeholder="예: ewha-anatomy-2026" autocomplete="off" />
+
+    <button id="go" disabled>document.enc 만들기</button>
+    <div id="msg" class="msg"></div>
+
+    <div class="note">
+      만들어진 <code>document.enc</code> 파일을 GitHub 레포의 <code>index.html</code>과 같은 위치에 올리면 됩니다.
+      비밀번호는 파일 안에 저장되지 않으며, 잊어버리면 복구할 수 없습니다.
+    </div>
+  </div>
+
+<script>
+const fileEl = document.getElementById('file');
+const pwEl   = document.getElementById('pw');
+const goBtn  = document.getElementById('go');
+const msg    = document.getElementById('msg');
+const PBKDF2_ITER = 250000; // 뷰어(index.html)와 반드시 동일해야 함
+
+function check(){ goBtn.disabled = !(fileEl.files.length && pwEl.value.length >= 4); }
+fileEl.addEventListener('change', check);
+pwEl.addEventListener('input', check);
+
+async function deriveKey(password, salt){
+  const km = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt, iterations:PBKDF2_ITER, hash:'SHA-256' },
+    km, { name:'AES-GCM', length:256 }, false, ['encrypt']);
+}
+
+goBtn.addEventListener('click', async ()=>{
+  goBtn.disabled = true; msg.className = 'msg'; msg.textContent = '암호화 중…';
+  try{
+    const buf  = await fileEl.files[0].arrayBuffer();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv   = crypto.getRandomValues(new Uint8Array(12));
+    const key  = await deriveKey(pwEl.value, salt);
+    const ct   = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, buf);
+
+    // 형식: [salt 16][iv 12][ciphertext]
+    const out = new Uint8Array(16 + 12 + ct.byteLength);
+    out.set(salt, 0); out.set(iv, 16); out.set(new Uint8Array(ct), 28);
+
+    const blob = new Blob([out], { type:'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'document.enc';
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const mb = (out.byteLength/1048576).toFixed(1);
+    msg.className = 'msg ok';
+    msg.innerHTML = '완료! <b>document.enc</b> ('+mb+'MB)가 다운로드되었습니다.';
+  }catch(err){
+    msg.className = 'msg err';
+    msg.textContent = '오류: ' + (err.message || err);
+  }finally{
+    goBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

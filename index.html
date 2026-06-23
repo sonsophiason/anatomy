@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<!-- 핀치 줌(손가락 확대/축소) 허용: maximum-scale를 크게 둠 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=6.0, user-scalable=yes, viewport-fit=cover" />
+<meta name="format-detection" content="telephone=no" />
+<title>열람 전용 자료</title>
+<link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.min.css" />
+<style>
+  /* ============================================================
+     설정값을 바꾸려면 아래 <script>의 CONFIG 부분을 수정하세요.
+     색/폰트 등 디자인은 이 <style>에서 조정합니다.
+     ============================================================ */
+  :root{
+    --bg:#f4f5f7;          /* 전체 배경(연한 회색) */
+    --page-bg:#ffffff;     /* 페이지 종이 색 */
+    --ink:#1d2125;         /* 본문 글자 */
+    --muted:#8a9099;       /* 보조 글자 */
+    --line:#e3e6ea;        /* 구분선 */
+    --accent:#2c8a86;      /* 포인트(차분한 청록) */
+    --bar-bg:rgba(255,255,255,.86);
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Pretendard Variable",Pretendard,-apple-system,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    /* 텍스트 선택·드래그·길게눌러 메뉴 전부 비활성화 */
+    -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;
+  }
+
+  /* ---------- 상단 바 ---------- */
+  #topbar{
+    position:fixed; top:0; left:0; right:0; height:48px; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px; gap:12px;
+    background:var(--bar-bg);
+    -webkit-backdrop-filter:saturate(180%) blur(12px);
+    backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+    padding-top:env(safe-area-inset-top);
+    height:calc(48px + env(safe-area-inset-top));
+  }
+  #topbar .title{
+    font-size:14px; font-weight:600; letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #topbar .title .dot{ color:var(--accent); }
+  #pageInd{
+    font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+  }
+
+  /* ---------- 뷰어 ---------- */
+  #viewer{
+    padding:calc(48px + env(safe-area-inset-top) + 14px) 0 40px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  .page{
+    position:relative;
+    width:min(100%, 980px);
+    background:var(--page-bg);
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,24,28,.06);
+  }
+  .page canvas{ display:block; width:100%; height:auto; }
+  .page .ph{ /* 아직 안 그려진 페이지 자리표시 */
+    display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:12px; letter-spacing:.04em;
+  }
+
+  /* ---------- 잠금(비밀번호) 화면 ---------- */
+  #gate{
+    position:fixed; inset:0; z-index:100;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg); padding:24px;
+  }
+  #gate .card{
+    width:100%; max-width:340px; text-align:center;
+  }
+  #gate .lock{
+    width:46px; height:46px; margin:0 auto 18px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%; background:#fff; border:1px solid var(--line);
+    color:var(--accent);
+  }
+  #gate h1{ font-size:17px; font-weight:600; margin:0 0 6px; letter-spacing:-.01em; }
+  #gate p{ font-size:13px; color:var(--muted); margin:0 0 22px; line-height:1.5; }
+  #pw{
+    width:100%; height:46px; padding:0 14px; font-size:16px;
+    border:1px solid var(--line); border-radius:10px; background:#fff;
+    color:var(--ink); outline:none; text-align:center;
+    -webkit-user-select:text; user-select:text;
+  }
+  #pw:focus{ border-color:var(--accent); }
+  #enter{
+    width:100%; height:46px; margin-top:10px; font-size:15px; font-weight:600;
+    border:none; border-radius:10px; background:var(--accent); color:#fff;
+    cursor:pointer; font-family:inherit;
+  }
+  #enter:active{ opacity:.85; }
+  #enter:disabled{ opacity:.5; }
+  #gateMsg{ font-size:12.5px; color:#c0392b; margin-top:12px; min-height:16px; }
+
+  /* ---------- 앱 전환 시 내용 가림(앱 스위처 미리보기 노출 방지) ---------- */
+  #blurShield{
+    position:fixed; inset:0; z-index:90; display:none;
+    background:var(--bg);
+    align-items:center; justify-content:center;
+    color:var(--muted); font-size:13px;
+  }
+  body.hidden #blurShield{ display:flex; }
+
+  /* ---------- 인쇄 차단 ---------- */
+  @media print{ html,body{ display:none !important; } }
+
+  /* ---------- 메모(주석) 레이어 ---------- */
+  .ann{
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none;            /* 보기 모드: 터치가 그대로 통과(스크롤/줌) */
+    touch-action:auto;
+  }
+  body.mode-draw .ann{
+    pointer-events:auto;            /* 그리기 모드 */
+    touch-action:pinch-zoom;        /* 한 손가락=그리기, 두 손가락=확대·이동 */
+  }
+
+  /* ---------- 하단 도구 팔레트 ---------- */
+  #toolbar{
+    position:fixed; left:50%; bottom:calc(14px + env(safe-area-inset-bottom));
+    transform:translateX(-50%); z-index:60;
+    display:flex; align-items:center; gap:5px; padding:6px 9px;
+    background:var(--bar-bg); border:1px solid var(--line); border-radius:16px;
+    -webkit-backdrop-filter:blur(12px) saturate(180%); backdrop-filter:blur(12px) saturate(180%);
+    box-shadow:0 6px 24px rgba(20,24,28,.16);
+    max-width:calc(100vw - 20px); overflow-x:auto; -webkit-overflow-scrolling:touch;
+  }
+  #toolbar button{
+    -webkit-appearance:none; appearance:none; border:none; background:transparent;
+    width:38px; height:38px; border-radius:10px; cursor:pointer; color:var(--ink);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto; padding:0;
+  }
+  #toolbar button:active{ transform:scale(.94); }
+  #toolbar button svg{ width:20px; height:20px; }
+  #toolbar button.tool.active{ background:var(--accent); color:#fff; }
+  #toolbar .sep{ width:1px; height:24px; background:var(--line); margin:0 2px; flex:0 0 auto; }
+  #toolbar .swatch{
+    width:26px; height:26px; border-radius:50%; background:var(--c);
+    border:2px solid #fff; box-shadow:0 0 0 1px var(--line);
+  }
+  #toolbar .swatch.active{ box-shadow:0 0 0 2px var(--accent); transform:scale(1.08); }
+  #toolbar .wbtn::after{
+    content:''; width:var(--d); height:var(--d); border-radius:50%;
+    background:var(--ink); display:block;
+  }
+  #toolbar .wbtn.active{ background:var(--line); }
+
+  .spin{
+    width:20px; height:20px; border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--accent);
+    animation:sp .7s linear infinite; display:inline-block;
+  }
+  @keyframes sp{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+  <!-- 비밀번호 잠금 -->
+  <div id="gate">
+    <div class="card">
+      <div class="lock">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      </div>
+      <h1>열람 전용 자료</h1>
+      <p>이 자료는 허가된 열람자만 볼 수 있습니다.<br/>발급받은 비밀번호를 입력하세요.</p>
+      <input id="pw" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="비밀번호" />
+      <button id="enter">열기</button>
+      <div id="gateMsg"></div>
+    </div>
+  </div>
+
+  <!-- 상단 바 -->
+  <div id="topbar" style="display:none">
+    <div class="title"><span class="dot">●</span> 열람 전용 자료</div>
+    <div id="pageInd">– / –</div>
+  </div>
+
+  <!-- 페이지가 렌더링되는 영역 -->
+  <div id="viewer"></div>
+
+  <!-- 하단 메모 도구 팔레트 -->
+  <div id="toolbar" style="display:none">
+    <button class="tool active" data-mode="view" aria-label="보기·이동" title="보기·이동">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9 2 12l3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
+    </button>
+    <button class="tool" data-mode="pen" aria-label="펜" title="펜">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    </button>
+    <button class="tool" data-mode="eraser" aria-label="지우개" title="지우개">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m19 14-9.5 9.5a2 2 0 0 1-2.8 0L3 20a2 2 0 0 1 0-2.8L12.5 7.7"/><path d="m12.5 7.7 6.8-6.8a2 2 0 0 1 2.8 0L24 3a2 2 0 0 1 0 2.8L17.2 12.6" transform="scale(0.83) translate(2 2)"/><path d="M7 22h13"/></svg>
+    </button>
+    <span class="sep"></span>
+    <button class="swatch active" data-color="#e23b3b" style="--c:#e23b3b" aria-label="빨강"></button>
+    <button class="swatch" data-color="#2c6fe2" style="--c:#2c6fe2" aria-label="파랑"></button>
+    <button class="swatch" data-color="#1d2125" style="--c:#1d2125" aria-label="검정"></button>
+    <button class="swatch" data-color="#f5a623" style="--c:#f5a623" aria-label="노랑"></button>
+    <span class="sep"></span>
+    <button class="wbtn" data-w="2" style="--d:4px" aria-label="가는 선"></button>
+    <button class="wbtn active" data-w="4" style="--d:7px" aria-label="중간 선"></button>
+    <button class="wbtn" data-w="8" style="--d:11px" aria-label="굵은 선"></button>
+    <span class="sep"></span>
+    <button id="undoBtn" aria-label="실행 취소" title="실행 취소">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+    </button>
+    <button id="clearBtn" aria-label="이 페이지 메모 지우기" title="이 페이지 메모 지우기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+    </button>
+  </div>
+
+  <!-- 앱 전환 가림막 -->
+  <div id="blurShield">화면이 잠시 가려졌습니다</div>
+
+<script type="module">
+import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.worker.min.mjs';
+
+/* ============================================================
+   ▼▼▼  여기만 바꾸면 됩니다  ▼▼▼
+   ============================================================ */
+const CONFIG = {
+  // 암호화된 파일을 쓸지 여부.
+  //  true  : document.enc (encrypt.html로 암호화한 파일) + 비밀번호 필요  ← 권장
+  //  false : document.pdf 원본을 그대로 사용(비밀번호 화면 없음, 보안 약함)
+  ENCRYPTED: true,
+
+  // 불러올 파일명 (레포에 함께 올린 파일)
+  FILE: 'document.enc',
+
+  // 상단 바 제목
+  TITLE: '열람 전용 자료',
+
+  // 페이지마다 비스듬히 깔리는 워터마크 문구.
+  // 스크린샷을 찍어도 이 문구가 같이 찍혀 "어디서 유출됐는지" 추적/억제 효과.
+  WATERMARK: '이화의료아카데미 · 열람전용 · 무단복제·반출 금지',
+
+  // 워터마크에 열람 날짜를 자동으로 덧붙일지
+  WATERMARK_DATE: true,
+
+  // 렌더링 선명도(높을수록 확대해도 또렷, 대신 메모리↑). iPad 권장 2~3.
+  RENDER_SCALE: 3,
+
+  // 동시에 메모리에 유지할 페이지 수(앞뒤로). 94p에서 메모리 안정용.
+  KEEP_BAND: 2,
+};
+/* ============================================================
+   ▲▲▲  설정 끝  ▲▲▲
+   ============================================================ */
+
+const $ = (s)=>document.querySelector(s);
+const gate = $('#gate'), pwInput = $('#pw'), enterBtn = $('#enter'),
+      gateMsg = $('#gateMsg'), viewer = $('#viewer'), topbar = $('#topbar'),
+      pageInd = $('#pageInd');
+$('.title').firstChild && (topbar.querySelector('.title').lastChild.textContent = ' ' + CONFIG.TITLE);
+
+// 세션 식별용 짧은 토큰(워터마크에 포함 → 유출본 추적 힌트)
+const SESSION = Math.random().toString(36).slice(2,7).toUpperCase();
+const WM_TEXT = CONFIG.WATERMARK
+  + (CONFIG.WATERMARK_DATE ? ('  ·  ' + new Date().toLocaleDateString('ko-KR')) : '')
+  + '  ·  ' + SESSION;
+
+/* ---------------- 유출 방지: 각종 동작 차단 ---------------- */
+const block = (e)=>{ e.preventDefault(); return false; };
+document.addEventListener('contextmenu', block);          // 우클릭/길게눌러 메뉴
+document.addEventListener('dragstart', block);            // 드래그 저장
+document.addEventListener('selectstart', (e)=>{           // 텍스트 선택(입력칸 제외)
+  if(e.target && e.target.id === 'pw') return;
+  e.preventDefault();
+});
+['copy','cut'].forEach(ev=>document.addEventListener(ev, block));
+// 키보드 단축키(키보드 연결된 iPad 대비): 저장/인쇄/소스보기/개발자도구
+document.addEventListener('keydown',(e)=>{
+  const k = (e.key||'').toLowerCase();
+  if((e.metaKey||e.ctrlKey) && ['s','p','u'].includes(k)) return block(e);
+  if((e.metaKey||e.ctrlKey) && e.altKey && ['i','j','c'].includes(k)) return block(e);
+  if(k === 'f12') return block(e);
+});
+// 앱 전환/백그라운드 시 내용 가림(앱 스위처 미리보기로 새는 것 방지)
+document.addEventListener('visibilitychange', ()=>{
+  document.body.classList.toggle('hidden', document.hidden);
+});
+window.addEventListener('blur', ()=>document.body.classList.add('hidden'));
+window.addEventListener('focus', ()=>document.body.classList.remove('hidden'));
+
+/* ---------------- 비밀번호 → 복호화 → 로드 ---------------- */
+const PBKDF2_ITER = 250000;
+
+async function deriveKey(password, salt){
+  const km = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt, iterations:PBKDF2_ITER, hash:'SHA-256' },
+    km, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+}
+
+async function loadEncrypted(password){
+  const res = await fetch(CONFIG.FILE, { cache:'no-store' });
+  if(!res.ok) throw new Error('파일을 찾을 수 없습니다 (' + CONFIG.FILE + ')');
+  const data = new Uint8Array(await res.arrayBuffer());
+  // 형식: [salt 16][iv 12][ciphertext]
+  const salt = data.slice(0,16), iv = data.slice(16,28), ct = data.slice(28);
+  const key = await deriveKey(password, salt);
+  let plain;
+  try{
+    plain = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct);
+  }catch(_){
+    throw new Error('비밀번호가 올바르지 않습니다.');
+  }
+  return new Uint8Array(plain);
+}
+
+async function loadPlain(){
+  const res = await fetch(CONFIG.FILE, { cache:'no-store' });
+  if(!res.ok) throw new Error('파일을 찾을 수 없습니다 (' + CONFIG.FILE + ')');
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+async function unlock(){
+  enterBtn.disabled = true; gateMsg.textContent = '';
+  enterBtn.innerHTML = '<span class="spin"></span>';
+  try{
+    const bytes = CONFIG.ENCRYPTED ? await loadEncrypted(pwInput.value) : await loadPlain();
+    await renderDocument(bytes);
+    gate.style.display = 'none';
+    topbar.style.display = 'flex';
+    document.getElementById('toolbar').style.display = 'flex';
+  }catch(err){
+    gateMsg.textContent = err.message || '열기에 실패했습니다.';
+  }finally{
+    enterBtn.disabled = false; enterBtn.textContent = '열기';
+  }
+}
+enterBtn.addEventListener('click', unlock);
+pwInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') unlock(); });
+if(!CONFIG.ENCRYPTED){ // 암호화 안 쓰면 자동 진입
+  gate.querySelector('p').textContent = '자료를 불러오는 중입니다…';
+  pwInput.style.display='none'; enterBtn.style.display='none';
+  window.addEventListener('load', unlock);
+}
+
+/* ---------------- PDF 렌더링 (지연 로딩 + 메모리 관리) ---------------- */
+let pdfDoc = null;
+const pages = [];     // { el, canvas, sizes:{w,h}, rendered, task }
+let renderQueue = [];
+let rafPending = false;
+
+async function renderDocument(bytes){
+  pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const n = pdfDoc.numPages;
+  pageInd.textContent = '1 / ' + n;
+
+  const containerW = Math.min(viewer.clientWidth || window.innerWidth, 980);
+
+  // 각 페이지 크기를 먼저 구해 자리표시(placeholder) 높이를 잡아둠
+  for(let i=1; i<=n; i++){
+    const page = await pdfDoc.getPage(i);
+    const vp = page.getViewport({ scale:1 });
+    const ratio = vp.height / vp.width;
+    const ph = Math.round(containerW * ratio);
+
+    const el = document.createElement('div');
+    el.className = 'page';
+    el.style.height = ph + 'px';
+    el.dataset.index = i;
+    el.innerHTML = '<div class="ph" style="height:'+ph+'px">'+ i +' 쪽</div>';
+    viewer.appendChild(el);
+
+    pages.push({ el, page, ratio, rendered:false, canvas:null });
+    page.cleanup && page.cleanup(); // 메타만 쓰고 즉시 정리
+  }
+
+  // 화면에 보이는 페이지를 감지해 렌더 / 멀어지면 해제
+  const io = new IntersectionObserver(onIntersect, {
+    root:null, rootMargin:'600px 0px', threshold:0.01
+  });
+  pages.forEach(p=>io.observe(p.el));
+
+  // 현재 보이는 페이지 번호 표시
+  const ind = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const idx = +e.target.dataset.index;
+        pageInd.textContent = idx + ' / ' + n;
+      }
+    });
+  }, { threshold:0.5 });
+  pages.forEach(p=>ind.observe(p.el));
+}
+
+function onIntersect(entries){
+  entries.forEach(e=>{
+    const idx = +e.target.dataset.index - 1;
+    pages[idx]._visible = e.isIntersecting;
+  });
+  scheduleReconcile();
+}
+
+function scheduleReconcile(){
+  if(rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(()=>{ rafPending = false; reconcile(); });
+}
+
+// 보이는 페이지 ± KEEP_BAND 만 렌더 상태로 유지, 나머지는 캔버스 해제
+function reconcile(){
+  const visibleIdx = pages.map((p,i)=>p._visible?i:-1).filter(i=>i>=0);
+  if(visibleIdx.length === 0) return;
+  const lo = Math.max(0, Math.min(...visibleIdx) - CONFIG.KEEP_BAND);
+  const hi = Math.min(pages.length-1, Math.max(...visibleIdx) + CONFIG.KEEP_BAND);
+
+  for(let i=0;i<pages.length;i++){
+    if(i>=lo && i<=hi){ if(!pages[i].rendered) renderPage(i); }
+    else { if(pages[i].rendered) unloadPage(i); }
+  }
+}
+
+async function renderPage(i){
+  const p = pages[i];
+  if(p.rendered || p._rendering) return;
+  p._rendering = true;
+  try{
+    const containerW = Math.min(viewer.clientWidth || window.innerWidth, 980);
+    const page = await pdfDoc.getPage(i+1);
+    const cssScale = containerW / page.getViewport({ scale:1 }).width;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const renderScale = cssScale * Math.max(CONFIG.RENDER_SCALE, dpr);
+    const vp = page.getViewport({ scale: renderScale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(vp.width);
+    canvas.height = Math.floor(vp.height);
+    const ctx = canvas.getContext('2d', { alpha:false });
+
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    drawWatermark(ctx, canvas.width, canvas.height);
+
+    p.el.innerHTML = '';
+    p.el.style.height = 'auto';
+    p.el.appendChild(canvas);
+    p.canvas = canvas; p.rendered = true;
+    p.cssW = containerW;
+
+    // 메모(주석) 캔버스를 페이지 위에 겹쳐 올림
+    const ann = document.createElement('canvas');
+    ann.className = 'ann';
+    const ADPR = 2; // 메모는 본문보다 가벼운 해상도면 충분
+    ann.width  = Math.max(1, Math.round(containerW * ADPR));
+    ann.height = Math.max(1, Math.round(ann.width * canvas.height / canvas.width));
+    p.el.appendChild(ann);
+    p.annCanvas = ann;
+    attachDrawing(i, ann);
+    if((annState.strokes.get(i) || []).length) replayPage(i);
+
+    page.cleanup && page.cleanup();
+  }catch(err){
+    // 렌더 실패 시 자리표시 유지
+  }finally{
+    p._rendering = false;
+  }
+}
+
+function unloadPage(i){
+  const p = pages[i];
+  if(!p.rendered) return;
+  const h = p.canvas ? p.canvas.getBoundingClientRect().height : (p.el.clientHeight||300);
+  if(p.canvas){ p.canvas.width = 0; p.canvas.height = 0; }
+  if(p.annCanvas){ p.annCanvas.width = 0; p.annCanvas.height = 0; }
+  p.canvas = null; p.annCanvas = null; p.rendered = false;
+  p.el.style.height = Math.round(h) + 'px';
+  p.el.innerHTML = '<div class="ph" style="height:'+Math.round(h)+'px">'+(i+1)+' 쪽</div>';
+}
+
+// 캔버스에 비스듬한 타일 워터마크를 직접 그려넣음(DOM에서 못 지우고, 스크린샷에도 찍힘)
+function drawWatermark(ctx, W, H){
+  ctx.save();
+  ctx.globalAlpha = 1;
+  const fs = Math.max(16, Math.round(W/42));
+  ctx.font = '600 ' + fs + 'px Pretendard, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(110,116,124,0.16)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const stepX = ctx.measureText(WM_TEXT).width + fs*4;
+  const stepY = fs*7;
+  ctx.translate(W/2, H/2);
+  ctx.rotate(-Math.PI/7);
+  ctx.translate(-W, -H);
+  for(let y=-H; y<H*3; y+=stepY){
+    const off = ((y/stepY) % 2) * (stepX/2);
+    for(let x=-W+off; x<W*3; x+=stepX){
+      ctx.fillText(WM_TEXT, x, y);
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   메모(주석) 엔진 — 펜 / 지우개 / 실행취소 / 페이지 지우기
+   - 좌표는 0~1로 정규화 저장 → 확대·회전·재렌더에도 정확히 따라감
+   - 획 데이터는 메모리에 보관 → 페이지가 내려갔다 다시 떠도 유지
+   ============================================================ */
+const annState = {
+  mode: 'view',         // 'view' | 'pen' | 'eraser'
+  color: '#e23b3b',
+  width: 4,             // 화면 기준 두께(px)
+  strokes: new Map(),   // pageIndex(0-base) -> [stroke]
+  undoOrder: [],        // 그린 순서(페이지 인덱스)
+};
+let drawing = null;     // 진행 중인 획 정보
+
+function pageStrokes(i){
+  if(!annState.strokes.has(i)) annState.strokes.set(i, []);
+  return annState.strokes.get(i);
+}
+function lineWpx(cv, stroke){
+  const ratio = cv.width / (cv.clientWidth || cv.width);
+  const base = stroke.tool === 'eraser' ? stroke.width * 2.6 : stroke.width;
+  return base * ratio;
+}
+function setupCtx(ctx, cv, stroke){
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.lineWidth = lineWpx(cv, stroke);
+  if(stroke.tool === 'eraser'){
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = ctx.fillStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = ctx.fillStyle = stroke.color;
+  }
+}
+function toNorm(cv, e){
+  const r = cv.getBoundingClientRect();
+  return { x:(e.clientX - r.left)/r.width, y:(e.clientY - r.top)/r.height };
+}
+
+// 저장된 획 전체를 다시 그림(실행취소·지우기·재렌더 시)
+function replayPage(i){
+  const p = pages[i];
+  if(!p || !p.annCanvas) return;
+  const cv = p.annCanvas, ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  for(const s of (annState.strokes.get(i) || [])){
+    if(!s.pts.length) continue;
+    setupCtx(ctx, cv, s);
+    const P = s.pts.map(pt=>({x:pt.x*cv.width, y:pt.y*cv.height}));
+    if(P.length === 1){
+      ctx.beginPath(); ctx.arc(P[0].x, P[0].y, ctx.lineWidth/2, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y);
+      for(let k=0;k<P.length-1;k++){
+        const mx=(P[k].x+P[k+1].x)/2, my=(P[k].y+P[k+1].y)/2;
+        ctx.quadraticCurveTo(P[k].x, P[k].y, mx, my);
+      }
+      ctx.lineTo(P[P.length-1].x, P[P.length-1].y);
+      ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function attachDrawing(i, cv){
+  cv.addEventListener('pointerdown', (e)=>{
+    if(annState.mode === 'view') return;
+    if(drawing) return;                     // 멀티터치: 둘째 손가락 무시
+    e.preventDefault();
+    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+    const pt = toNorm(cv, e);
+    const stroke = { tool:annState.mode, color:annState.color, width:annState.width, pts:[pt] };
+    drawing = { id:e.pointerId, i, cv, stroke, last:pt };
+    const ctx = cv.getContext('2d');
+    setupCtx(ctx, cv, stroke);
+    const x = pt.x*cv.width, y = pt.y*cv.height;
+    ctx.beginPath(); ctx.arc(x, y, ctx.lineWidth/2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x, y);
+  });
+
+  cv.addEventListener('pointermove', (e)=>{
+    if(!drawing || e.pointerId !== drawing.id) return;
+    e.preventDefault();
+    const ctx = cv.getContext('2d');
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for(const ev of evs){
+      const pt = toNorm(cv, ev);
+      drawing.stroke.pts.push(pt);
+      const x = pt.x*cv.width, y = pt.y*cv.height;
+      const lx = drawing.last.x*cv.width, ly = drawing.last.y*cv.height;
+      const mx = (lx+x)/2, my = (ly+y)/2;
+      ctx.quadraticCurveTo(lx, ly, mx, my);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx, my);
+      drawing.last = pt;
+    }
+  });
+
+  const finish = (e)=>{
+    if(!drawing || e.pointerId !== drawing.id) return;
+    pageStrokes(drawing.i).push(drawing.stroke);
+    annState.undoOrder.push(drawing.i);
+    cv.getContext('2d').globalCompositeOperation = 'source-over';
+    drawing = null;
+  };
+  cv.addEventListener('pointerup', finish);
+  // 두 손가락 확대 등으로 제스처가 가로채지면 진행 중 획을 깨끗이 제거
+  cv.addEventListener('pointercancel', ()=>{
+    if(!drawing) return;
+    const i = drawing.i; drawing = null; replayPage(i);
+  });
+}
+
+function setMode(m){
+  annState.mode = m;
+  document.body.classList.toggle('mode-draw', m !== 'view');
+  document.querySelectorAll('#toolbar .tool').forEach(b=>
+    b.classList.toggle('active', b.dataset.mode === m));
+}
+function undo(){
+  const i = annState.undoOrder.pop();
+  if(i === undefined) return;
+  const list = annState.strokes.get(i);
+  if(list && list.length) list.pop();
+  replayPage(i);
+}
+function clearVisible(){
+  const vis = pages.map((p,idx)=>p._visible?idx:-1).filter(x=>x>=0);
+  if(!vis.length) return;
+  vis.forEach(i=>{ annState.strokes.set(i, []); replayPage(i); });
+  annState.undoOrder = annState.undoOrder.filter(x=>!vis.includes(x));
+}
+
+// 도구 팔레트 연결
+document.querySelectorAll('#toolbar .tool').forEach(b=>
+  b.addEventListener('click', ()=> setMode(b.dataset.mode)));
+document.querySelectorAll('#toolbar .swatch').forEach(b=>
+  b.addEventListener('click', ()=>{
+    annState.color = b.dataset.color;
+    document.querySelectorAll('#toolbar .swatch').forEach(x=>x.classList.toggle('active', x===b));
+    if(annState.mode === 'view' || annState.mode === 'eraser') setMode('pen');
+  }));
+document.querySelectorAll('#toolbar .wbtn').forEach(b=>
+  b.addEventListener('click', ()=>{
+    annState.width = +b.dataset.w;
+    document.querySelectorAll('#toolbar .wbtn').forEach(x=>x.classList.toggle('active', x===b));
+  }));
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('clearBtn').addEventListener('click', clearVisible);
+
+// 회전/리사이즈 시 너비 갱신을 위해 모든 페이지 재렌더 유도
+let resizeT;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeT);
+  resizeT = setTimeout(()=>{
+    pages.forEach((p,i)=>{ if(p.rendered) unloadPage(i); });
+    scheduleReconcile();
+  }, 250);
+});
+</script>
+</body>
+</html>
