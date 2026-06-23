@@ -8,8 +8,8 @@
 <title>열람 전용 자료</title>
 <link rel="stylesheet" as="style" crossorigin
       href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.min.css" />
-<!-- PDF 표시 엔진: 호환성이 가장 좋은 안정 버전(구형 아이패드 포함) -->
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.min.js"></script>
+<!-- PDF 표시 엔진: 레포에 함께 올린 파일을 사용(외부 인터넷·CDN 불필요) -->
+<script src="pdf.min.js"></script>
 <style>
   /* ============================================================
      설정값을 바꾸려면 아래 <script>의 CONFIG 부분을 수정하세요.
@@ -234,8 +234,9 @@
   <div id="blurShield">화면이 잠시 가려졌습니다</div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdn.jsdelivr.net/npm/[email protected]/build/pdf.worker.min.js';
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+}
 
 /* ============================================================
    ▼▼▼  여기만 바꾸면 됩니다  ▼▼▼
